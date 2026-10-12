@@ -1,0 +1,20 @@
+[Unit]
+Description=Telegram to Google Drive transfer bot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_VPS_USER
+WorkingDirectory=/opt/easy_tel
+EnvironmentFile=/opt/easy_tel/.env
+ExecStart=/opt/easy_tel/.venv/bin/python -m easy_tel
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
