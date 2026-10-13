@@ -14,7 +14,7 @@ class RcloneError(RuntimeError):
 
 def retry_delay(exc, attempt, base=15):
     """None means operator action is needed. Flood waits are never shortened."""
-    if isinstance(exc, errors.FloodWaitError):
+    if isinstance(exc, (errors.FloodWaitError, errors.FloodPremiumWaitError)):
         return max(1, exc.seconds)
     if isinstance(exc, PermanentError):
         return None

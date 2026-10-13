@@ -1,6 +1,13 @@
 import shutil
+import logging
+import os
+import time
+from .download import download_media
 from .retry import PermanentError
 from .transfer import upload_verified
+
+
+log = logging.getLogger('easy_tel.worker')
 
 
 async def transfer_job(client, job, state, reserve, destination, progress):
@@ -16,7 +23,16 @@ async def transfer_job(client, job, state, reserve, destination, progress):
         if not message or not message.file:
             raise PermanentError('Source message no longer available')
         progress.phase_update('downloading')
-        await client.download_media(message, file=str(partial), progress_callback=progress.update)
+        configured_workers = max(1, min(8, int(os.environ.get('TEL_DOWNLOAD_WORKERS', '4'))))
+        previous_attempts = job['attempts'] if 'attempts' in job.keys() else 0
+        workers = max(1, configured_workers // 2**min(3, previous_attempts))
+        started = time.monotonic()
+        mode = await download_media(client, message, partial, job['size'], progress.update,
+                                    workers=workers,
+                                    threshold=int(os.environ.get('TEL_PARALLEL_MIN_BYTES', str(32*1024*1024))))
+        elapsed = max(.001, time.monotonic() - started)
+        log.info('Job %s download: mode=%s, elapsed=%.1fs, rate=%.2f MiB/s',
+                 job['id'], mode, elapsed, job['size']/elapsed/1024**2)
         if not partial.is_file() or partial.stat().st_size != job['size']:
             raise OSError('Downloaded size mismatch')
         partial.replace(path)

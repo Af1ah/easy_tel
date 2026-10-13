@@ -43,8 +43,9 @@ The authentication check writes no session and starts no transfers. Normal
 startup checks Drive read access. Send `/id`, allow that ID, restart, and send
 a small document. Confirm "uploaded and verified" and check Drive before
 testing 2–3 GB files. A 3 GB source upload requires a Telegram Premium sender.
-Large-file speed and real transfers have not yet been validated. This first
-version uses a single download stream, without parallel Telegram connections.
+Real VPS throughput still needs measurement. Large documents use four concurrent
+MTProto chunk requests by default; small files/photos use Telethon's standard
+downloader. This does not require a Premium subscription.
 
 ## Continuous operation
 
@@ -155,3 +156,58 @@ Reviewed current official upstream docs/source before implementation:
 Direct documentation sites were blocked by this environment's egress proxy;
 the linked official upstream sources were accessible. Compatibility was tested
 with the installed rclone 1.60.1 and Telethon 1.42.0.
+
+## Download performance without Premium
+
+The original downloader fetched one chunk at a time. For example, 850 MB in
+five minutes is about 2.8 MB/s. A 512 KiB request followed by a roughly 180 ms
+round trip can produce a similar rate even with bandwidth available. This is a
+possible explanation, not a measurement of your VPS's Telegram connection.
+
+For documents at least 32 MiB, the app now pipelines four independent download
+iterators through Telethon's public API. They use supported 512 KiB requests and
+write disjoint offsets into the partial file. Memory use stays bounded; files
+are never buffered entirely in RAM. All workers must complete and every chunk
+must have the expected length before the file is eligible for upload. Workers
+are cancelled and joined before a failed partial file is closed.
+
+- `TEL_DOWNLOAD_WORKERS=4`: conservative default, clamped to 1–8. Set 1 to use
+  the standard downloader. Start with 4; don't increase it just because your
+  VPS is advertised as 1 Gbps.
+- `TEL_PARALLEL_MIN_BYTES=33554432`: use the standard downloader below this size.
+- Incompatible iterator/media responses fall back to the standard downloader.
+  Network, disk, or flood errors follow the persistent retry policy instead.
+- Retries reduce request concurrency (4 → 2 → 1 with default settings). Telegram
+  flood waits, including Premium-related waits, are honored in full. This does
+  not bypass Telegram account or file-size limits.
+- A native `cryptg` encryption/decryption accelerator is installed by
+  `requirements.txt`. Confirm it is active in the **same virtualenv** used by
+  systemd; pure Python encryption can bottleneck on CPU.
+
+After updating the VPS and loading its trusted `.env`:
+
+```bash
+.venv/bin/python -m easy_tel --diagnose
+sudo journalctl -u easy-tel -f
+```
+
+Diagnostics require neither credentials nor network access. Successful download
+logs include the job ID, downloader mode, elapsed seconds, and average MiB/s.
+Compare the same representative file with `TEL_DOWNLOAD_WORKERS=1` and `4`
+(restart the service after each setting change). A newly sent file creates a
+new job; previously completed local downloads will be reused and will not
+measure download speed again. Check CPU usage, disk throughput, and the VPS's
+actual speed-test result while downloading. Compare Mbps and MiB/s carefully:
+1 Gbps is about 119 MiB/s before overhead, not a guaranteed per-service rate.
+An upload to Google Drive at 14 MB/s does not establish the download bandwidth
+available from Telegram. Provider shaping, routing to Telegram's data center,
+shared CPU, and Telegram-side limits can still dominate.
+
+The automated suite exercises the actual pinned Telethon iterators with
+simulated MTProto replies: concurrent requests, out-of-order arrival, tail
+chunks, interrupted transfers, short disk writes, and Premium flood waits.
+It proves assembly and failure handling, not real Telegram throughput. The
+cloud environment still cannot connect to Telegram, so verify the improvement
+on your VPS before relying on a particular speed. Relevant upstream reference:
+[Telethon iter_download](https://docs.telethon.dev/en/stable/modules/client.html#telethon.client.downloads.DownloadMethods.iter_download)
+and [current download implementation](https://github.com/LonamiWebs/Telethon/blob/v1/telethon/client/downloads.py).

@@ -84,7 +84,7 @@ class Progress:
             self.last_text = text
         except errors.MessageNotModifiedError:
             self.last_text = text
-        except errors.FloodWaitError as exc:
+        except (errors.FloodWaitError, errors.FloodPremiumWaitError) as exc:
             self.blocked_until = self.clock() + exc.seconds
         except Exception:
             # Retry on a later tick; notification failure must not fail a transfer.

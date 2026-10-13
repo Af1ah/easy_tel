@@ -32,6 +32,18 @@ async def authenticate(client, token):
     print(f"Authenticated @{me.username}", flush=True)
 
 
+def diagnose():
+    import sys
+    import telethon
+    from telethon.crypto import aes
+    print('Python:', sys.version.split()[0])
+    print('Telethon:', telethon.__version__)
+    print('Native AES acceleration:', 'active' if aes.cryptg is not None else 'MISSING — install requirements.txt')
+    print('Configured download workers:', os.environ.get('TEL_DOWNLOAD_WORKERS', '4'))
+    print('Parallel threshold (bytes):', os.environ.get('TEL_PARALLEL_MIN_BYTES', str(32*1024*1024)))
+    print('Parallel disk writes:', 'supported' if hasattr(os, 'pwrite') else 'standard downloader fallback')
+
+
 async def main(check=False):
     api_id, api_hash, token = credentials()
     state = Path(os.environ.get("TEL_STATE_DIR", "./state")).resolve()
@@ -162,8 +174,13 @@ async def main(check=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--check-telegram", action="store_true", help="Authenticate bot without starting transfers")
+    parser.add_argument("--diagnose", action="store_true", help="Show local download setup without credentials or network access")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
+    log.setLevel(logging.INFO)
+    if args.diagnose:
+        diagnose()
+        raise SystemExit(0)
     try:
         asyncio.run(main(args.check_telegram))
     except KeyboardInterrupt:
