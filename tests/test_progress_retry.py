@@ -100,6 +100,33 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(callback.called, 'No progress records parsed from the installed rclone')
             self.assertEqual(target.read_bytes(), source.read_bytes())
 
+    async def test_buttons_can_be_added_without_changing_terminal_text(self):
+        from telethon import Button
+        progress = self.reporter(message_id=10)
+        progress.phase_update('uploaded and verified')
+        await progress.emit()
+        progress.buttons = [[Button.url('Download','https://drive.google.com/uc?id=test')]]
+        await progress.emit(force=True)
+        self.assertEqual(self.client.edit_message.await_count,2)
+        self.assertEqual(self.client.edit_message.call_args.kwargs['buttons'],progress.buttons)
+
+    async def test_buttons_changed_during_edit_are_not_lost(self):
+        from telethon import Button
+        progress = self.reporter(message_id=10)
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def delayed_edit(*args, **kwargs):
+            entered.set()
+            await release.wait()
+        self.client.edit_message.side_effect = delayed_edit
+        task = asyncio.create_task(progress.emit())
+        await entered.wait()
+        progress.buttons = [[Button.url('Download','https://drive.google.com/uc?id=test')]]
+        release.set()
+        await task
+        await progress.emit(force=True)
+        self.assertEqual(self.client.edit_message.await_count,2)
+        self.assertEqual(progress.last_buttons,progress.buttons)
+
 
 class RetryTests(unittest.IsolatedAsyncioTestCase):
     def test_retry_policy(self):

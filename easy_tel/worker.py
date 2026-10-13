@@ -37,6 +37,7 @@ async def transfer_job(client, job, state, reserve, destination, progress):
             raise OSError('Downloaded size mismatch')
         partial.replace(path)
     progress.phase_update('uploading to Drive')
-    target = f"{destination}/{job['id']}-{job['name']}"
-    await upload_verified(path, target, progress=progress.update,
+    target = (job['remote_path'] if 'remote_path' in job.keys() and job['remote_path']
+              else f"{destination}/{job['id']}-{job['name']}")
+    return await upload_verified(path, target, progress=progress.update,
                           verifying=lambda: progress.phase_update('verifying Drive checksum'))

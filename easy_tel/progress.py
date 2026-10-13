@@ -35,6 +35,8 @@ class Progress:
         self.last_at = float('-inf')
         self.blocked_until = 0
         self.last_text = None
+        self.buttons = None
+        self.last_buttons = None
         self.detail = ''
         self.task = None
 
@@ -62,7 +64,8 @@ class Progress:
 
     async def emit(self, force=False):
         now, text = self.clock(), self.text()
-        if now < self.blocked_until or text == self.last_text:
+        buttons = self.buttons
+        if now < self.blocked_until or (text == self.last_text and buttons == self.last_buttons):
             return
         if not force and now - self.last_at < self.interval:
             return
@@ -71,19 +74,21 @@ class Progress:
             if self.message_id:
                 try:
                     await asyncio.wait_for(self.client.edit_message(
-                        self.chat, self.message_id, text, parse_mode=None), 15)
+                        self.chat, self.message_id, text, parse_mode=None, buttons=buttons), 15)
                 except (errors.MessageIdInvalidError, errors.MessageAuthorRequiredError,
                         errors.MessageEditTimeExpiredError):
                     self.message_id = None
             if not self.message_id:
                 message = await asyncio.wait_for(self.client.send_message(
-                    self.chat, text, parse_mode=None), 15)
+                    self.chat, text, parse_mode=None, buttons=buttons), 15)
                 self.message_id = message.id
                 if self.save_message:
                     self.save_message(message.id)
             self.last_text = text
+            self.last_buttons = buttons
         except errors.MessageNotModifiedError:
             self.last_text = text
+            self.last_buttons = buttons
         except (errors.FloodWaitError, errors.FloodPremiumWaitError) as exc:
             self.blocked_until = self.clock() + exc.seconds
         except Exception:

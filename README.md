@@ -63,7 +63,7 @@ sudo journalctl -u easy-tel -n 50
 Only run one instance per state directory. Protect `.env` and `state/` as
 credentials. Keep state on persistent storage. Default maximum size is 4 GiB,
 disk reserve is 1 GiB, and queue capacity is 20. Reserve space for retained
-failed files too. No public Drive links are created.
+failed files too. Completed uploads get a public-link Download button; anyone holding that link can access the file.
 
 ## Commands and recovery
 
@@ -211,3 +211,58 @@ cloud environment still cannot connect to Telegram, so verify the improvement
 on your VPS before relying on a particular speed. Relevant upstream reference:
 [Telethon iter_download](https://docs.telethon.dev/en/stable/modules/client.html#telethon.client.downloads.DownloadMethods.iter_download)
 and [current download implementation](https://github.com/LonamiWebs/Telethon/blob/v1/telethon/client/downloads.py).
+
+## Download buttons and /storage
+
+After a verified upload, the bot creates a read-only public Drive link through
+`rclone link` and attaches **Download**, **Delete**, and **Manage storage**
+buttons to its status message. Anyone holding the link can download; links do
+not expire automatically. Google may show a virus-scan confirmation or enforce
+its own download quotas for large files. The button targets Drive's download
+endpoint and requires no web server on the VPS.
+
+If sharing permissions or networking prevent link creation, the upload remains
+successful. **Get download link** retries that step without downloading or
+uploading again. The bot registers `/storage` in its Telegram command menu at startup (preserving
+existing entries). If updating the menu fails, typed commands still work.
+The `/storage` command lists **your own completed bot uploads**,
+with total file size, pagination, and optional Drive account quota information
+(cached for a minute). It does not browse arbitrary files already on the remote.
+Quota information can be unavailable on some Drive accounts while file browsing
+still works. Stored-file totals are the bot's catalog, not a live scan of all
+Drive contents; external moves/deletions can leave stale entries.
+
+Delete offers:
+
+- **Move to trash**: recoverable through Drive. Trash still occupies quota and
+  can retain shared access; this is not a way to revoke a public link reliably.
+- **Permanently delete instead**: requires a separate, explicitly labelled
+  confirmation. Removes that exact file rather than an entire folder, allowing
+  quota to be reclaimed (Google's quota display may update later).
+
+Confirmations expire after two minutes, are bound to the requesting user and
+file, and cannot be replayed. Cancel or a bot restart invalidates them. Only
+allowed Telegram users can manage their own files. File ID, size, and recorded
+MD5 are checked before sharing/deletion; changed/replaced files are refused.
+Deleted items disappear from the bot catalog; failed deletion keeps the item
+available to retry. Sharing and deletion need the corresponding privileges in
+the existing rclone authorization. No trash-wide purge is performed.
+
+New jobs retain their exact Drive destination even if `TEL_DRIVE_DEST` changes.
+Older completed jobs lack recorded paths/IDs and are resolved under the current
+configured folder on first use, then checked and recorded. If that folder changed
+since an old upload, restore the appropriate setting or manage that file in
+Drive; do not assume the bot can discover relocated files. An interrupted delete
+is rechecked after restart; if the file is already missing, a later confirmed
+operation removes the stale catalog entry rather than deleting another object.
+
+Stop the service and privately back up the database before upgrading. The schema
+migration retains existing jobs and adds file catalog fields automatically.
+After the upgrade, test a small upload, its Download button, `/storage`, Cancel,
+and confirmed deletion on a disposable file. Public sharing and real Drive
+permissions still require this VPS test; cloud tests use simulated Drive replies.
+
+Official references:
+[rclone link](https://rclone.org/commands/rclone_link/),
+[rclone deletefile](https://rclone.org/commands/rclone_deletefile/), and
+[Google Drive trash behavior](https://rclone.org/drive/#deleting-files).

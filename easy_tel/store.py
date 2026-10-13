@@ -13,10 +13,12 @@ class Store:
         columns = {row[1] for row in self.db.execute('PRAGMA table_info(jobs)')}
         for name, definition in {'attempts':'INTEGER NOT NULL DEFAULT 0',
                                  'next_attempt':'REAL NOT NULL DEFAULT 0',
-                                 'progress_message':'INTEGER', 'error':'TEXT'}.items():
+                                 'progress_message':'INTEGER', 'error':'TEXT',
+                                 'remote_path':'TEXT', 'remote_id':'TEXT', 'remote_md5':'TEXT', 'download_url':'TEXT'}.items():
             if name not in columns:
                 self.db.execute(f'ALTER TABLE jobs ADD COLUMN {name} {definition}')
         self.db.execute("UPDATE jobs SET status='queued' WHERE status='running'")
+        self.db.execute("UPDATE jobs SET status='done' WHERE status='deleting'")
         self.db.commit()
 
     def add(self, chat, message, name, size):
@@ -60,3 +62,41 @@ class Store:
 
     def recent(self, chat):
         return self.db.execute('SELECT id,status,attempts,next_attempt,error FROM jobs WHERE chat=? ORDER BY id DESC LIMIT 10', (chat,)).fetchall()
+
+    def owned_file(self, job_id, chat):
+        return self.db.execute("SELECT * FROM jobs WHERE id=? AND chat=? AND status IN ('done','deleting')",
+                               (job_id, chat)).fetchone()
+
+    def prepare_remote(self, job_id, destination):
+        with self.db:
+            row = self.db.execute('SELECT name FROM jobs WHERE id=?', (job_id,)).fetchone()
+            self.db.execute('UPDATE jobs SET remote_path=COALESCE(remote_path,?) WHERE id=?',
+                            (f"{destination}/{job_id}-{row['name']}", job_id))
+
+    def complete(self, job_id, metadata):
+        metadata = metadata or {}
+        hashes = {key.lower(): value for key, value in metadata.get('Hashes', {}).items()}
+        with self.db:
+            self.db.execute("UPDATE jobs SET status='done', remote_id=?, remote_md5=? WHERE id=?",
+                            (metadata.get('ID'), hashes.get('md5'), job_id))
+
+    def remember_file(self, job_id, metadata):
+        hashes = {key.lower(): value for key, value in metadata.get('Hashes', {}).items()}
+        with self.db:
+            self.db.execute('UPDATE jobs SET remote_id=COALESCE(remote_id,?),remote_md5=COALESCE(remote_md5,?) WHERE id=?',
+                            (metadata.get('ID'), hashes.get('md5'), job_id))
+
+    def save_link(self, job_id, url):
+        with self.db:
+            self.db.execute('UPDATE jobs SET download_url=? WHERE id=?', (url, job_id))
+
+    def files(self, chat, page=0, page_size=5):
+        return self.db.execute("SELECT * FROM jobs WHERE chat=? AND status IN ('done','deleting') ORDER BY id DESC LIMIT ? OFFSET ?",
+                               (chat, page_size, page*page_size)).fetchall()
+
+    def file_totals(self, chat):
+        row = self.db.execute("SELECT count(*) AS count, COALESCE(sum(size),0) AS size FROM jobs WHERE chat=? AND status IN ('done','deleting')", (chat,)).fetchone()
+        return row['count'], row['size']
+
+    def job(self, job_id):
+        return self.db.execute('SELECT * FROM jobs WHERE id=?', (job_id,)).fetchone()

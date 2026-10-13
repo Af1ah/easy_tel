@@ -93,7 +93,7 @@ async def rclone(*args: str, progress=None) -> str:
     return stdout.decode()
 
 
-async def upload_verified(path: Path, target: str, progress=None, verifying=None) -> None:
+async def upload_verified(path: Path, target: str, progress=None, verifying=None) -> dict:
     await rclone('copyto', str(path), target, '--checksum', '--immutable',
                  '--transfers', '1', '--drive-chunk-size', '64M',
                  '--use-json-log', '--stats', '2s', '--stats-one-line',
@@ -109,3 +109,4 @@ async def upload_verified(path: Path, target: str, progress=None, verifying=None
     if result.get('Size') != path.stat().st_size or remote_hash.lower() != await md5(path):
         raise PermanentError('Drive size/checksum verification failed; local file retained')
     path.unlink()
+    return result

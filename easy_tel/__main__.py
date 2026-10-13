@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, functions, types
 from telethon.sessions import MemorySession
 
 from .store import Store
@@ -12,6 +12,7 @@ from .transfer import rclone, safe_name
 from .progress import Progress, duration
 from .retry import retry_delay, error_summary
 from .worker import transfer_job
+from .storage import Storage
 
 log = logging.getLogger("easy_tel")
 
@@ -30,6 +31,19 @@ async def authenticate(client, token):
     if not me.bot or (me.username or "").lower() != expected:
         raise ValueError("Authenticated bot does not match TEL_EXPECTED_BOT_USERNAME")
     print(f"Authenticated @{me.username}", flush=True)
+
+
+async def register_commands(client):
+    scope = types.BotCommandScopeDefault()
+    current = await client(functions.bots.GetBotCommandsRequest(scope, ''))
+    entries = {command.command: command.description for command in current}
+    entries.update({'start':'How to upload files', 'help':'Show commands', 'id':'Show my Telegram user ID',
+                    'status':'Recent transfer jobs', 'retry':'Retry a failed job: /retry JOB_ID',
+                    'storage':'Manage uploaded files and Drive storage'})
+    if len(entries) > 100:
+        raise ValueError('Command menu is full')
+    commands = [types.BotCommand(command, description) for command, description in entries.items()]
+    await client(functions.bots.SetBotCommandsRequest(scope, '', commands))
 
 
 def diagnose():
@@ -62,6 +76,11 @@ async def main(check=False):
         # Read-only access check before accepting transfer jobs.
         await rclone("lsd", "gdrive:")
         store = Store(state / "jobs.sqlite3")
+        storage = Storage(store, destination)
+        try:
+            await asyncio.wait_for(register_commands(client), 15)
+        except Exception as exc:
+            log.warning("Command menu update unavailable: %s; commands still work", type(exc).__name__)
         maximum = int(os.environ.get("TEL_MAX_FILE_BYTES", "4294967296"))
         reserve = int(os.environ.get("TEL_DISK_RESERVE_BYTES", "1073741824"))
         queue_limit = int(os.environ.get("TEL_MAX_QUEUE", "20"))
@@ -69,6 +88,13 @@ async def main(check=False):
         max_attempts = max(1, int(os.environ.get("TEL_MAX_ATTEMPTS", "4")))
         progress_interval = max(3, float(os.environ.get("TEL_PROGRESS_INTERVAL", "5")))
         retry_base = max(1, float(os.environ.get("TEL_RETRY_BASE_SECONDS", "15")))
+
+        @client.on(events.CallbackQuery)
+        async def storage_action(event):
+            if not event.is_private or event.sender_id not in allowed:
+                await event.answer("Access denied", alert=True)
+                return
+            await storage.callback(event)
 
         @client.on(events.NewMessage(incoming=True))
         async def receive(event):
@@ -82,7 +108,10 @@ async def main(check=False):
                 await event.reply("Transfers are restricted. Use /id and ask the operator to allow your ID.")
                 return
             if text in ("/start", "/help"):
-                await event.reply("Send or forward a file to upload it to Drive. /status shows recent jobs. Use /retry JOB_ID to retry a failed job. Failed local files are retained.")
+                await event.reply("Send or forward a file to upload it to Drive. /status shows recent jobs. Use /retry JOB_ID to retry a failed job. /storage lists your uploads with download and delete buttons.")
+            elif text == "/storage":
+                text, buttons = await storage.page(event.chat_id)
+                await event.reply(text, buttons=buttons, parse_mode=None, link_preview=False)
             elif text == "/status":
                 rows = store.recent(event.chat_id)
                 await event.reply("\n".join(
@@ -130,6 +159,8 @@ async def main(check=False):
                 if job["attempts"] >= max_attempts:
                     store.status(job["id"], "failed")
                     continue
+                store.prepare_remote(job["id"], destination)
+                job = store.job(job["id"])
                 attempt = job["attempts"] + 1
                 store.begin(job["id"])
                 progress = Progress(client, job["chat"], job["id"], job["name"], job["size"],
@@ -137,8 +168,8 @@ async def main(check=False):
                                     save_message=lambda mid: store.save_progress(job["id"], mid))
                 await progress.start()
                 try:
-                    await transfer_job(client, job, state, reserve, destination, progress)
-                    store.status(job["id"], "done")
+                    metadata = await transfer_job(client, job, state, reserve, destination, progress)
+                    store.complete(job["id"], metadata)
                     progress.phase_update("uploaded and verified")
                 except Exception as exc:
                     delay = retry_delay(exc, attempt, retry_base)
@@ -152,6 +183,16 @@ async def main(check=False):
                         store.status(job["id"], "failed")
                         progress.phase_update("failed",
                             f"Attempt {attempt}/{max_attempts}: {reason}. Local files retained. Fix the cause, then /retry {job['id']}.")
+                else:
+                    # Link creation must never turn a verified upload into a failed transfer.
+                    progress.buttons = storage.file_buttons(job["id"])
+                    try:
+                        url = await asyncio.wait_for(storage.link(job["id"], job["chat"]), 45)
+                        progress.buttons = storage.file_buttons(job["id"], url)
+                        progress.detail = "Anyone with the download link can access this file."
+                    except Exception as exc:
+                        log.warning("Job %s download link unavailable: %s", job["id"], type(exc).__name__)
+                        progress.detail = "Upload complete. Use Get download link or /storage to retry link creation."
                 finally:
                     await progress.close()
 
