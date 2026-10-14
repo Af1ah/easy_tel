@@ -21,11 +21,11 @@ def duration(seconds):
 
 
 class Progress:
-    def __init__(self, client, chat, job_id, name, total, interval=5,
+    def __init__(self, client, chat, job_id, name, total, interval=1,
                  message_id=None, save_message=None, clock=time.monotonic):
         self.client, self.chat, self.job_id = client, chat, job_id
         self.name, self.total = name, total
-        self.interval = max(3, interval)
+        self.interval = max(1, interval)
         self.message_id, self.save_message = message_id, save_message
         self.clock = clock
         self.phase = 'queued'

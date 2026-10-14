@@ -96,7 +96,7 @@ async def rclone(*args: str, progress=None) -> str:
 async def upload_verified(path: Path, target: str, progress=None, verifying=None) -> dict:
     await rclone('copyto', str(path), target, '--checksum', '--immutable',
                  '--transfers', '1', '--drive-chunk-size', '64M',
-                 '--use-json-log', '--stats', '2s', '--stats-one-line',
+                 '--use-json-log', '--stats', '1s', '--stats-one-line',
                  '--stats-log-level', 'NOTICE', '--retries', '1',
                  '--low-level-retries', '3', '--contimeout', '15s', '--timeout', '2m',
                  progress=progress)

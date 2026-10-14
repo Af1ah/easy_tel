@@ -86,7 +86,7 @@ async def main(check=False):
         queue_limit = int(os.environ.get("TEL_MAX_QUEUE", "20"))
         wake = asyncio.Event()
         max_attempts = max(1, int(os.environ.get("TEL_MAX_ATTEMPTS", "4")))
-        progress_interval = max(3, float(os.environ.get("TEL_PROGRESS_INTERVAL", "5")))
+        progress_interval = max(1, float(os.environ.get("TEL_PROGRESS_INTERVAL", "1")))
         retry_base = max(1, float(os.environ.get("TEL_RETRY_BASE_SECONDS", "15")))
 
         @client.on(events.CallbackQuery)

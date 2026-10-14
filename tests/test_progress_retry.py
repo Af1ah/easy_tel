@@ -19,6 +19,7 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         self.clock = Mock(return_value=100)
         self.client = SimpleNamespace(send_message=AsyncMock(return_value=SimpleNamespace(id=42)),
                                       edit_message=AsyncMock())
+        kwargs.setdefault('interval', 5)
         return Progress(self.client, 123, 1, 'file.zip', 1000, clock=self.clock, **kwargs)
 
     async def test_edits_one_message_and_throttles_callbacks(self):
@@ -37,6 +38,29 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('ETA:', self.client.edit_message.call_args.args[2])
         await progress.emit(force=True)
         self.client.edit_message.assert_awaited_once()
+
+    async def test_one_second_progress_refresh(self):
+        progress = self.reporter(interval=1)
+        progress.phase_update('downloading')
+        await progress.emit()
+        self.clock.return_value = 100.5
+        progress.update(250)
+        await progress.emit()
+        self.client.edit_message.assert_not_awaited()
+        self.clock.return_value = 101
+        await progress.emit()
+        self.assertIn('25.0%', self.client.edit_message.call_args.args[2])
+        progress.phase_update('uploading to Drive')
+        progress.update(500, speed=100, eta=5)
+        self.clock.return_value = 102
+        await progress.emit()
+        self.assertIn('50.0%', self.client.edit_message.call_args.args[2])
+        self.assertEqual(self.client.edit_message.await_count, 2)
+
+    def test_progress_default_and_minimum_are_one_second(self):
+        client = Mock()
+        self.assertEqual(Progress(client, 123, 1, 'file', 1000).interval, 1)
+        self.assertEqual(Progress(client, 123, 1, 'file', 1000, interval=.1).interval, 1)
 
     async def test_deleted_message_falls_back_to_new_message(self):
         save = Mock()

@@ -105,14 +105,14 @@ checksum before reporting success. ETA is an estimate, not a promised completion
 time; it does not include queue waiting or later stages.
 
 Transfer callbacks only update in-memory counters. A separate notifier edits at
-most once every five seconds by default (`TEL_PROGRESS_INTERVAL`, minimum three).
+most once every second by default (`TEL_PROGRESS_INTERVAL`, minimum one second).
 Terminal updates may be immediate, but still respect flood waits.
 Unchanged messages are skipped. Telegram flood waits pause notifications without
 pausing data transfer. If the status message was deleted or cannot be edited,
 the bot creates a replacement and saves its ID. Network failures retry the edit
 on a later tick instead of creating duplicate messages. A terminal update can
 be delayed or missed during a Telegram outage; `/status` reads the durable job
-state. Upload statistics are sampled every two seconds using rclone JSON logs,
+state. Upload statistics are sampled every second using rclone JSON logs,
 with a text-stats fallback for older versions. If no readable stats are emitted,
 the bot shows the stage without inventing transfer progress. No rclone remote
 control port or additional HTTP service is exposed.
