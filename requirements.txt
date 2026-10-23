@@ -3,3 +3,5 @@ cryptg==0.5.2
 pyaes==1.6.1
 rsa==4.9.1
 pyasn1==0.6.4
+
+aiohttp==3.14.5

@@ -1,0 +1,34 @@
+[Unit]
+Description=Easy Tel browser player and on-demand media preparation
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# Use the same existing, non-root Linux account as the working easy-tel service.
+User=YOUR_VPS_USER
+WorkingDirectory=/opt/easy_tel
+EnvironmentFile=/opt/easy_tel/.media.env
+ExecStart=/opt/easy_tel/.venv/bin/python -m easy_tel.web --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/easy_tel/state/media
+InaccessiblePaths=-/opt/easy_tel/.env -/opt/easy_tel/state/bot.session -/opt/easy_tel/state/jobs.sqlite3 -/opt/easy_tel/state/downloads
+Nice=5
+CPUWeight=20
+IOWeight=20
+# These are ceilings, not reserved resources. Idle playback uses much less.
+CPUQuota=200%
+MemoryHigh=1500M
+MemoryMax=2G
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

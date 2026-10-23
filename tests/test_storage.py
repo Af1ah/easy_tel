@@ -148,3 +148,22 @@ class StorageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(request,functions.bots.SetBotCommandsRequest)
         self.assertIn('storage',[command.command for command in request.commands])
         self.assertIn('existing',[command.command for command in request.commands])
+
+    async def test_watch_button_and_successful_delete_revoke_local_media(self):
+        from easy_tel.media import MediaLibrary
+        source=Path(self.folder.name)/'movie.mkv'
+        source.write_bytes(b'payload')
+        movie=self.store.add(123,999,'movie.mkv',7)
+        self.store.prepare_remote(movie['id'],'gdrive:easy_tel')
+        self.store.complete(movie['id'],self.meta)
+        library=MediaLibrary(self.folder.name,'https://watch.example.test',reserve=0)
+        await library.register(dict(movie),source)
+        self.storage.media=library
+        buttons=self.storage.file_buttons(movie['id'])
+        self.assertEqual(buttons[0][0].text,'Watch video')
+        self.assertEqual(buttons[0][0].url,library.link(movie['id'],123))
+        _,confirmation=self.storage.confirmation(movie['id'],123,0)
+        token=confirmation[0][0].data.decode().split(':')[1]
+        with patch('easy_tel.storage.rclone',AsyncMock(side_effect=[json.dumps(self.meta),''])):
+            await self.storage.delete(token,123)
+        self.assertIsNone(library.link(movie['id'],123))

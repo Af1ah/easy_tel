@@ -9,6 +9,8 @@ from telethon import Button, errors
 from .progress import size_text
 from .retry import RcloneError
 from .transfer import rclone
+from .media import MediaLibrary
+import os
 
 
 class StorageError(RuntimeError):
@@ -38,6 +40,7 @@ class Storage:
         self.lock = asyncio.Lock()
         self.quota_text = ''
         self.quota_at = float('-inf')
+        self.media = MediaLibrary.from_env() if os.environ.get('TEL_MEDIA_ENABLED','0').lower() in ('1','true','yes') else None
 
     def owned(self, job_id, chat):
         row = self.store.owned_file(job_id, chat)
@@ -84,8 +87,13 @@ class Storage:
 
     def file_buttons(self, job_id, url=None, page=0):
         download = Button.url('Download', url) if url else Button.inline('Get download link', f'link:{job_id}:{page}'.encode())
-        return [[download, Button.inline('Delete', f'delete:{job_id}:{page}'.encode())],
-                [Button.inline('Manage storage', f'storage:{page}'.encode())]]
+        buttons = [[download, Button.inline('Delete', f'delete:{job_id}:{page}'.encode())],
+                   [Button.inline('Manage storage', f'storage:{page}'.encode())]]
+        job=self.store.job(job_id)
+        watch = self.media.link(job_id,job['chat']) if self.media and job else None
+        if watch:
+            buttons.insert(0,[Button.url('Watch video',watch)])
+        return buttons
 
     async def quota(self):
         if self.clock() - self.quota_at < 60:
@@ -153,6 +161,7 @@ class Storage:
                 if exc.code != 4:
                     raise
                 self.store.status(job_id, 'deleted')
+                if self.media: self.media.revoke(job_id,chat)
                 return 'The file is already absent from its recorded Drive location.'
             self.store.status(job_id, 'deleting')
             try:
@@ -163,6 +172,7 @@ class Storage:
                 self.store.status(job_id, 'done')
                 raise
             self.store.status(job_id, 'deleted')
+            if self.media: self.media.revoke(job_id,chat)
             self.store.save_link(job_id, None)
             self.quota_at = float('-inf')
             return (f'File #{job_id} permanently deleted.' if confirmation[3]

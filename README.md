@@ -266,3 +266,12 @@ Official references:
 [rclone link](https://rclone.org/commands/rclone_link/),
 [rclone deletefile](https://rclone.org/commands/rclone_deletefile/), and
 [Google Drive trash behavior](https://rclone.org/drive/#deleting-files).
+
+## Optional browser media server
+
+The bot can retain a bounded, temporary local watch copy while continuing Drive
+uploads. A **Watch video** button opens a self-hosted Plyr/hls.js player with
+seeking, ±10-second double-tap, audio/subtitle menus, mute, and fullscreen.
+Preparation is on-demand and cached, with compatible video/audio copied unchanged.
+See [MEDIA.md](MEDIA.md) for the low-resource policy, supported/unsupported formats,
+HTTPS and systemd setup, security model, and reproducible browser tests.

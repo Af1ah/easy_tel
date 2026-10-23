@@ -5,6 +5,7 @@ import time
 from .download import download_media
 from .retry import PermanentError
 from .transfer import upload_verified
+from .media import MediaLibrary
 
 
 log = logging.getLogger('easy_tel.worker')
@@ -36,6 +37,12 @@ async def transfer_job(client, job, state, reserve, destination, progress):
         if not partial.is_file() or partial.stat().st_size != job['size']:
             raise OSError('Downloaded size mismatch')
         partial.replace(path)
+    if os.environ.get('TEL_MEDIA_ENABLED','0').lower() in ('1','true','yes'):
+        try:
+            await MediaLibrary.from_env().register(job,path)
+        except Exception as exc:
+            # A full cache or preparation problem must not break the Drive transfer.
+            log.warning('Job %s watch cache unavailable: %s',job['id'],type(exc).__name__)
     progress.phase_update('uploading to Drive')
     target = (job['remote_path'] if 'remote_path' in job.keys() and job['remote_path']
               else f"{destination}/{job['id']}-{job['name']}")

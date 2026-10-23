@@ -1,0 +1,7 @@
+# The hostname must resolve to your VPS; allow inbound TCP 80 and 443.
+# Merge this site into your existing Caddyfile rather than overwriting other sites.
+tel.aflahdev.me {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8080
+    # Do not enable request URL logging: watch/media URLs contain access tokens.
+}
