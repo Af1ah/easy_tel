@@ -49,6 +49,9 @@ downloader. This does not require a Premium subscription.
 
 ## Continuous operation
 
+For tested automatic updates and service restarts after pushes to `main`, follow
+[DEPLOY.md](DEPLOY.md). It includes the one-time SSH setup and manual updater.
+
 Replace `YOUR_VPS_USER` in `deploy/easy-tel.service` with the user owning the
 rclone configuration. As an administrator:
 

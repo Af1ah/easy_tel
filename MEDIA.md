@@ -55,7 +55,7 @@ above 2 GiB. A normal website ping is not a guarantee of video startup or throug
 
 2. Preserve your existing `.env`. Add the media settings from `.env.example` and
    set `TEL_MEDIA_ENABLED=1`. Set `TEL_MEDIA_BASE_URL` to the public HTTPS origin
-   without a trailing path, for example `https://tel.aflahdev.me`. Both services
+   without a trailing path, for example `https://tv.ariise.cloud`. Both services
    must use the same state directory. Edit `.media.env` with the matching media
    settings; keep Telegram/rclone credentials out of this separate file. The template expects `/opt/easy_tel/state`.
    Existing Drive-only uploads are not downloaded again automatically; send a

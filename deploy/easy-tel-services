@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Install root-owned outside the checkout. Only these fixed services/actions.
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[[ $# == 1 ]] || exit 2
+services=(easy-tel.service)
+media=0
+if systemctl is-enabled --quiet easy-tel-media.service; then
+    services+=(easy-tel-media.service)
+    media=1
+fi
+all_active() {
+    local service
+    for service in "${services[@]}"; do
+        systemctl is-active --quiet "$service" || return 1
+    done
+}
+case "$1" in
+    preflight)
+        systemctl cat easy-tel.service >/dev/null
+        if (( media )); then systemctl cat easy-tel-media.service >/dev/null; fi
+        ;;
+    stop|start) systemctl "$1" "${services[@]}" ;;
+    check)
+        for (( attempt=0; attempt<30; attempt++ )); do
+            if all_active &&
+               { (( ! media )) || curl --fail --silent --max-time 2 http://127.0.0.1:8080/healthz >/dev/null; }; then
+                sleep 3
+                all_active
+                if (( media )); then curl --fail --silent --max-time 2 http://127.0.0.1:8080/healthz >/dev/null; fi
+                echo 'Services are running; media HTTP health passed when enabled.'
+                exit 0
+            fi
+            sleep 1
+        done
+        echo 'Service startup failed. Inspect systemctl status and journalctl on the VPS.' >&2
+        exit 1
+        ;;
+    *) echo 'Allowed actions: preflight, stop, start, check' >&2; exit 2 ;;
+esac
