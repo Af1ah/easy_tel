@@ -5,4 +5,3 @@ Source: https://plyr.io
 hls.js 1.7.3 (Apache-2.0)
 Integrity: sha512-MsPlx6yVW4Qv4C7mEVou4/gk/5cN2dVxOTnrNjPSmyH2f0Ln+/UkG10Ax1PE6OvrmTVPKgQYozTtBaPOuCzq7A==
 Source: https://github.com/video-dev/hls.js
-
